@@ -1,2 +1,2 @@
 # ScummJS
-This is a Point and Click Adventure game "engine" inspired from SCUMM(Script Creation Utility for Maniac Mansion) based on CreateJS. The premouses of this project is to make an adventure game easily and playable like a modern Humongous Entertainment adventure.
+ScummJS is a Point and Click Adventure game "engine" inspired by SCUMM (Script Creation Utility for Maniac Mansion) based on CreateJS. This project aims to easily allow anyone to make an adventure game with play mechanics like a modern Humongous Entertainment adventure game. Classic SCUMM engine functionality (such as walk boxes) may be added sometime in the future on a separate branch. 
