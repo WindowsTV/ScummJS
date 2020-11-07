@@ -18,9 +18,11 @@ this.com.wtv = window.com.wtv || {};
 	"use strict"; 
 // constructor:
 	/**
-	 * The SoundLayer is a class to create interactions between the multiplayer server and the client.
+	 * The SoundLayer is a class to create layers for seperate sounds to play on
 	 * @class SoundLayer
-	 * @param {CodeBlock} target The instance to manage.
+	 * @param id{Number}
+	 * @param name{String}
+	 * @param maxConcurrent{Number} Number of sounds allowed to play on the layer
 	 * @constructor
 	 */
 	function SoundLayer(id, name, maxConcurrent) {	
