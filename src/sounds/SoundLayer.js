@@ -12,7 +12,6 @@
 // namespace:
 this.com = window.com || {};
 this.com.wtv = window.com.wtv || {};
-//this.alphapenguin = this.alphapenguin||{};
  
 (function() {
 	"use strict"; 
