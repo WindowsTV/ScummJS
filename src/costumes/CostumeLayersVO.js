@@ -18,6 +18,7 @@ this.sjs = window.sjs || {};
 		var _theLayerNumber = 1;
 		for(var i = 0; i <= costumeObject.length; i++){	
 			//Remove isNewType in favor for a check to see if the Costume has layers 
+			//Consider using CreateJS's children instead of custom layers
 			if(costumeObject[i] && costumeObject[i].isNewType && costumeObject[i].isNewType == true)continue;
 			if(costumeObject[i] && costumeObject[i].s != undefined){
 					this["_layer" + _theLayerNumber] = costumeObject[i].s;					
