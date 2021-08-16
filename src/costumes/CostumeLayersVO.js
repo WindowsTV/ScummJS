@@ -1,6 +1,5 @@
 // namespace:
-this.com = window.com || {};
-this.com.wtv = window.com.wtv || {};
+this.sjs = window.sjs || {};
  
 (function() {
 	"use strict";
@@ -14,17 +13,25 @@ this.com.wtv = window.com.wtv || {};
 	 * @param layer4{createjs Sprite}
 	 * @constructor
 	 */
-	function CostumeLayersVO(layer1 = undefined, layer2 = undefined, layer3 = undefined, layer4 = undefined) {	
-		// public properties:
-		this._layer1 = layer1;//Single Layered Animation or Body Layer
-		if(this._layer1 != undefined) this._layer1.name = "layer1"		
-		this._layer2 = layer2;//mouth/haed layer
-		if(this._layer2 != undefined) this._layer2.name = "layer2"		
-		this._layer3 = layer3;//pupils layer
-		if(this._layer3 != undefined) this._layer2.name = "layer3"		
-		this._layer4 = layer4;//eye lids layer	
-		if(this._layer4 != undefined) this._layer4.name = "layer4"		
-		this._amount = 4;		
+	function CostumeLayersVO(costumeObject) {	
+		// public properties:	
+		var _theLayerNumber = 1;
+		for(var i = 0; i <= costumeObject.length; i++){	
+			//Remove isNewType in favor for a check to see if the Costume has layers 
+			if(costumeObject[i] && costumeObject[i].isNewType && costumeObject[i].isNewType == true)continue;
+			if(costumeObject[i] && costumeObject[i].s != undefined){
+					this["_layer" + _theLayerNumber] = costumeObject[i].s;					
+					if(this["_layer" + _theLayerNumber] != undefined) {
+						this["_layer" + _theLayerNumber].name = ["layer" + _theLayerNumber];	
+						this["_layer" + _theLayerNumber].type = costumeObject[i].t;	
+						/*if(this.isADynamicLayer(this["_layer" + _theLayerNumber].type)){
+							this["_layer" + _theLayerNumber].isDynamic = true;	
+						}*/
+					}
+					_theLayerNumber++;
+			}
+		}
+		this._amount = (_theLayerNumber - 1);
 		return this;
 	}
 	var p = CostumeLayersVO.prototype; 
@@ -43,6 +50,13 @@ this.com.wtv = window.com.wtv || {};
 			return this['_layer' + this._amount];
 		}
 	};
+	p.isADynamicLayer = function(typeToCheck){
+		if (typeToCheck == sjs.CostumeLayersVO.HEAD ||
+			typeToCheck == sjs.CostumeLayersVO.EYES ||
+			typeToCheck == sjs.CostumeLayersVO.LIDS) {
+		   return true;
+		};
+	};
 
 	/**
 	 * Returns a string representation of this object.
@@ -54,6 +68,10 @@ this.com.wtv = window.com.wtv || {};
 	};
 	
 	// private methods:
-	com.wtv.CostumeLayersVO = CostumeLayersVO;
+	sjs.CostumeLayersVO = CostumeLayersVO;
+	sjs.CostumeLayersVO.BODY = "body";
+	sjs.CostumeLayersVO.HEAD = "head";
+	sjs.CostumeLayersVO.EYES = "eyes";
+	sjs.CostumeLayersVO.LIDS = "lids";
 }());
  
