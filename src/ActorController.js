@@ -8,15 +8,21 @@ window.sjs.ActorController = class ActorController{
 		// ...
 
 		// Use "this" to set class variables
-		this.stage = stage;		
-		this.actors = {0:undefined};
-		this.actorLayer = room;		
-		this.talkie;		
+		this.stage = stage;//createjs.Stage		
+		this.actors = {0:undefined};//Default actors Object
+		this.actorLayer = room;	//The DisplayObject the actors will always be children of.
+		//this.talkie;	//No longer in use
 		this.currentTalkiePlaying;		
 		this.currentActorTalking;
-		this.cantAddNewActors = false;
+		this.cantAddNewActors = false;//This stops any actors able to be drawn
 	}
 	
+	/**
+	 * addEmptyActor creates an actor without a costume. Having no costume means it won't be drawn until a costume is set.
+	 * @class addEmptyActor
+	 * @isPlayer {Bool} if it's the player, set up the Actor with player features.
+	 * @target {DisplayObject} The parent that the Costume will be attached to.
+	 */
 	addEmptyActor(isPlayer = false, target)
 	{
 		console.log("[ActorController]addEmptyActor(isPlayer = "+ isPlayer + ") -> Adding actor with NO COSTUME!");
@@ -25,36 +31,43 @@ window.sjs.ActorController = class ActorController{
 		return (this.addActor(-1, false, isPlayer, undefined, 0, target));
 	}// end of the function
 		
-	addActor(startingCostume, isIdle = false, isPlayer = false, roomOverride = undefined, startFrame = 0, target = undefined, color = undefined)
-	{		//Test(_controller, _actor_index, _actorNumber, isPlayer = false)
-		
+	addActor(startingCostume, isIdle = false, isPlayerOrType = false, roomOverride = undefined, startFrame = 0, target = undefined, color = undefined)
+	{				
 		if(this.cantAddNewActors == true) return;
+		
 		var _actorID = this.getNextActorID();	
-		if(isPlayer === "putt"){
+		if(isPlayerOrType === "putt"){
 			this.actors[_actorID] = new sjs.PuttCostume(this, _actorID, true);	
 			this.actors[_actorID].isPuttPutt = true;	
+		}else if(isPlayerOrType === window.sjs.ActorController.SIMPLE_ACTOR){
+			this.actors[_actorID] = new sjs.SimpleCostume(this, _actorID, true);	
 		}else{
-			this.actors[_actorID] = new sjs.Test(this, _actorID, isPlayer);	
+			this.actors[_actorID] = new sjs.Test(this, _actorID, isPlayerOrType);	
 		}
 
-		this.actors[_actorID].color = (color == undefined) ? roomTemps._playerCurrentColor : color;
-		this.actors[_actorID].CCColor = (color == undefined) ? roomTemps._PCCColor[roomTemps._playerCurrentColor] : color;
+		if(!isPlayerOrType !== window.sjs.ActorController.SIMPLE_ACTOR){
+			this.actors[_actorID].color = (color == undefined) ? roomTemps._playerCurrentColor : color;
+			this.actors[_actorID].CCColor = (color == undefined) ? roomTemps._PCCColor[roomTemps._playerCurrentColor] : color;
+		}
+		
 		var _cost;
-		if(startingCostume === -1)_cost = this.actors[_actorID].setCostume(-1, false);
-		else{
+		if(startingCostume !== -1){
 			if(roomOverride == undefined && (COSTUMES_DIRECTORY[roomTemps.currentRoomID] == undefined || !COSTUMES_DIRECTORY[roomTemps.currentRoomID][startingCostume])){
-				console.log("AAAAAAAAAH HEY: " + roomOverride);
+				//console.log("AAAAAAAAAH GET FROOM: " + roomOverride);
 				if(isInRestart == true) 
 					console.log("IS IN RESTART..");
 					return;
 			}
 			else _cost = this.actors[_actorID].setCostume([COSTUMES_DIRECTORY[((roomOverride == undefined) ? roomTemps.currentRoomID : roomOverride)][startingCostume], startingCostume], isIdle, startFrame);
-		}
+		}else _cost = this.actors[_actorID].setCostume(-1, false);
+		
 		this.actors[_actorID].name = (startingCostume == -1) ? "empty_actor" : startingCostume;
-		this.stage.actors = this.actors;
-				
+		this.stage.actors = this.actors;				
 		console.log("[ActorController] addActor()-> _actorID: " + _actorID + " / " + this.actors[_actorID].COSTUME);
-
+		
+		if(target == "addActorAt")//addActor was called from addActorAt()
+			return ({cost:_cost, actorID:_actorID});
+		
 		if(target == undefined){
 			this.actorLayer.addChild(_cost);
 		}else {target.addChild(_cost); this.actors[_actorID].target = target;}
@@ -62,57 +75,30 @@ window.sjs.ActorController = class ActorController{
 		return ({actor:this.actors[_actorID], actorID:_actorID});
 	}// end of the function
 	
-	addActorAt(startingCostume, depthLevel = 1, payload = {isIdle: false, isPlayer: false, roomOverride: undefined, startFrame: 0, target: undefined, color: ""})
+	addActorAt(startingCostume, depthLevel = 1, payload = {isIdle: false, isPlayer: false, type: null, roomOverride: undefined, startFrame: 0, target: undefined, color: ""})
 	{
 		if(this.cantAddNewActors == true) return ({actor:null, actorID:-1});
+		if(debug == true) console.debug("[ActorController]addActorAt called!");
 		
-		var _actorID = this.getNextActorID();		
-		if(payload.isPlayer === "putt"){
-			this.actors[_actorID] = new sjs.PuttCostume(this, _actorID, true);		
-			this.actors[_actorID].isPuttPutt = true;	
-		}
-		else
-			this.actors[_actorID] = new sjs.Test(this, _actorID, payload.isPlayer);	
-		
-		this.actors[_actorID].color = (payload.isPlayer == true) ? roomTemps._playerCurrentColor : payload.color;
-		if(payload.isPlayer == true)this.actors[_actorID].CCColor = roomTemps._PCCColor[roomTemps._playerCurrentColor];
-		
-		if((payload.roomOverride == undefined) && COSTUMES_DIRECTORY[roomTemps.currentRoomID] == undefined || !COSTUMES_DIRECTORY[roomTemps.currentRoomID][startingCostume]){
-			if(isInRestart)
-				return;
-		}
-				
-		var _cost = this.actors[_actorID].setCostume(
-			[
-				COSTUMES_DIRECTORY[((payload.roomOverride == undefined) ? roomTemps.currentRoomID : payload.roomOverride)][startingCostume], 
-				startingCostume
-			], 
-			payload.isIdle, 
-			payload.startFrame
-		);
-		
-		this.actors[_actorID].name = startingCostume;
-		this.stage.actors = this.actors;				
-		console.log("[ActorController] addActorAt()-> _actorID: " + _actorID + " / " + this.actors[_actorID].COSTUME);
+		var _actor = this.addActor(startingCostume, payload.isIdle, payload.isPlayer, payload.roomOverride, payload.startFrame, "addActorAt", payload.color);	
+		if(_actor.cost){
+			var target = payload.target;
+			if(target == undefined){
+				this.actorLayer.addChildAt(_actor.cost, depthLevel);
+			}else {target.addChildAt(_actor.cost, depthLevel); this.actors[_actorID].target = target;}
+		}else return;
 
-		var target = payload.target;
-		if(target == undefined){
-			this.actorLayer.addChildAt(_cost, depthLevel);
-		}else {target.addChildAt(_cost, depthLevel); this.actors[_actorID].target = target;}
-
-		return ({actor:this.actors[_actorID], actorID:_actorID});
+		return ({actor:this.actors[_actor.actorID], actorID:_actor.actorID});
 	}// end of the function
 	
-	getActorIndexByID(actorID, caller = ""){ //remove this function
+	// ActorController.getActorIndexByID is @deprecated.. Remove for full release
+	getActorIndexByID = createjs.deprecate(function(actorID, caller = ""){
 		return actorID;
-	}// end of the function
+	}, "sjs.ActorController.getActorIndexByID");
 	
 	getActorIDByName(actorName, caller = ""){
-		//console.debug("[ActorController]getActorIDByName(actorName: "+ actorName+")");
 		for(var key in this.actors){
-			//console.debug("[ActorController]getActorIDByName("+caller+") -> LOOK FOR ACTOR: "+ actorName + "! ON INDEX: " + key);
 			if(this.actors[key] && this.actors[key].name == actorName){
-				//console.debug("[ActorController]getActorIDByName("+caller+") -> GOT FOR ACTOR "+ key + ": " + this.actors[key].name);
 				return key;
 			}
 		};
@@ -143,31 +129,23 @@ window.sjs.ActorController = class ActorController{
 	}// end of the function
 	
 	stopAllTalking(){	
-		//var _actorIdex = this.getActorIndexByID(this.currentActorTalking);
-		//if(_actorIdex == undefined)this.currentActorTalking = null;
-		//if(this.currentActorTalking){
-		sjs.ActorController.stopWaitingTalkie();
+		//TODO: Use this.currentActorTalking instead of looping through
+		//REASON: Only ONE actor can talk at a time..
 		for(i = 0; i <= Object.getOwnPropertyNames(actors).length; i++){
 			if(this.actors[i]  && this.actors[i].isTalking == true){					
 				this.actors[i].stopTalking();
-			}	
-	
-		}
+			}		
+		}//End of Loop
 	}// end of the function
 					
 	removeActor(actorID, doDelete = true, removeTarget = true)	{
 		//var index = this.getActorIndexByID(actorID, 'removeActor');
 		let index = actorID;
 		let actor = this.actors[index];	
-		console.debug("[ActorController][CostumeTrunk]removeActor(actorID: " + actorID +") / " + this.actors[index].COSTUME);
-		/*console.warn("[ActorController]index]: " + index);
-		console.warn(this.actors);
-		console.warn(this.actors[index]);*/
 		if(!actor){
 			console.warn("[ActorController]Actor: " + actorID + " was not available to remove!!");
 			return;
 		}
-		//if(fastMode == false)this.actors[index].setOriginalFPS();
 		this.actors[index].COSTUME.removeAllChildren();
 		if(removeTarget){
 			if(this.actors[index].target){
@@ -182,7 +160,7 @@ window.sjs.ActorController = class ActorController{
 		}
 		this.actors[index].FramesSignal.removeAll();	
 		this.actors[index].AnimationFinishedSignal.removeAll();	
-		this.actors[index].TalkingCompleted.removeAll();	
+		if(this.actors[index].TalkingCompleted) this.actors[index].TalkingCompleted.removeAll();	
 		this.actors[index].ActorClicked.removeAll();	
 		this.actors[index].animationendFunc = null;	
 		this.actors[index].actorID = null;
@@ -204,10 +182,9 @@ window.sjs.ActorController = class ActorController{
 	}
 	
 	removeAllActorsFromRoom(setCantAddNewActors = false){
-		console.debug("[ActorController]removeAllActorsFromRoom() -> Actors array "+ Object.keys(this.actors).length);
 		for(var key in this.actors){
 			if(this.actors[key] && this.actors[key].actorID){
-				console.debug("[ActorController]removeAllActorsFromRoom() -> "+ this.actors[key].COSTUME.name);
+				if(debug == true) console.debug("[ActorController]removeAllActorsFromRoom() -> "+ this.actors[key].COSTUME.name);
 				this.removeActor(this.actors[key].actorID, false, false);
 			}
 		};
@@ -237,6 +214,7 @@ window.sjs.ActorController = class ActorController{
 		return id + 1;
 	}		
 }
+window.sjs.ActorController.SIMPLE_ACTOR = "simp";
 window.sjs.ActorController.currentActorInTalkWait = -1;
 window.sjs.ActorController.currentTalking = -1;
 window.sjs.ActorController.staticStopAllTalking = function (dispatchEvents = false){
