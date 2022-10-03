@@ -15,6 +15,7 @@ this.sjs = window.sjs || {};
 	 */
 	function PuttCostume(_controller, _actorNumber, isPlayer = false) {	
 		// public properties:
+		this.CLASS_NAME = "Actor";
 		this.COSTUME = new createjs.Container();
 		this.controller = _controller;
 
@@ -500,7 +501,7 @@ this.sjs = window.sjs || {};
 	}// end of the function
 	
 	p.stopTalking = function(dispatchEvent = false){	
-											 
+		if((multiTextCCObj && multiTextCCObj._multiPartText && multiTextCCObj._multiPartText.length > 1) && multiTextCCObj._multiPartIndex >= 0)multiTextCCObj._multiPartIndex = -1;
 		this.stopTalkieAudio();
 		this.stopFlappingMouth("stopTalking");
 		this.isTalking = false;
@@ -544,6 +545,9 @@ this.sjs = window.sjs || {};
 	} // End of the function
 	
 	p.handleTextComplete = function(event) {
+		if (multiTextCCObj.hasOwnProperty('_multiPartText') && (multiTextCCObj._multiPartText.length > 1 && multiTextCCObj._multiPartIndex >= 0)){
+			return;
+		}
 		console.log("[CostumeTrunk] Text is hidden..continue playing talkies...");
 		if(this.talkieLoadError)SignalsObject.CCTimeout.remove(this.handleTextComplete, this);
 		if(this._talkieCompletedCallback) this._talkieCompletedCallback();
@@ -603,7 +607,7 @@ this.sjs = window.sjs || {};
  
 	p.flapMouth = function(hasLipSync = false){	
 		console.debug("[CostumeTrunk] flapMouth(_eyeState: " + this.eyeState + ")");
-		var _eyeLayer = this._eyes;
+		var _eyeLayer = this._eyes;		
 		if(this._lids)this._lids.removeAllEventListeners("animationend");		
 		let _eyeStateUpdate = this.lookAt(this.tempEyeState);
 		if(debug == true)console.debug("[CostumeTrunk] flapMouth -> _eyeStateUpdate: " + _eyeStateUpdate); 
@@ -658,7 +662,7 @@ this.sjs = window.sjs || {};
 	p.handleAudioUpdates = function(e) {
 		if(!this.actorID) return;
 		if(!this.controller.stage.canUpdate)return;
-		if(!this.isTalking)return;		
+		if(!this.isTalking)return;
 	} // End of the function
 		
 	p.movePuttsHead = function(evt){	
