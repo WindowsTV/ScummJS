@@ -20,8 +20,7 @@ this.sjs = window.sjs || {};
 		this.controller = _controller;
 
 		//COSTUME VARS
-		this.color = "purple";
-								   
+		this.color = "purple";								   
 		this.isIdle = false;
 		
 		/**_layers_ and _layers are being phased
@@ -85,7 +84,7 @@ this.sjs = window.sjs || {};
 		this.normalEyeState = "normal";
 		this.tempEyeState = "";
 		this.roomRef = _controller.roomReference;
-		this.costInitFunc = null;
+		this.costInitFunc = null;//Only works when Actor was created...Ex. addEmptyActor was called before setting costInitFunc
 		
 		//EVENTS AND SIGNALS
 		this.animationendFunc;		
@@ -93,7 +92,7 @@ this.sjs = window.sjs || {};
 		this.AnimationFinishedSignal = new signals.Signal(Number);	
 		this.TalkingCompleted = new signals.Signal(Number);	
 		this.ActorClicked = new signals.Signal(Number);	
-		this.FramesSignal = new signals.Signal(Number);	
+		this.FramesSignal = new signals.Signal();	
 		this.frameScipts = new Array();	
 		
 		//DIALOGE RELATED VARIABLES
@@ -101,9 +100,11 @@ this.sjs = window.sjs || {};
 		this.flapWaitsForLids = false;		
 		this.isFlapWaitingForLids = false;		
 		this.isMouthFlapping  = false;		
+		this.mouthFlappingAnimation = undefined;		
 		this._waitDelegate = null;		
 		this._talkWaitActive = false;		
 		this.isTalking = false;		
+		this.canSwitchWhileTalking = false;		
 		this.talkieLoadError = false;		
 		this.isTalkingFromArray = false;		
 		this.lastTalkie;		
@@ -135,7 +136,7 @@ this.sjs = window.sjs || {};
 	 * @return COSTUME {Container} a representation of the Actor's state.
 	 **/
 
-	p.setCostume = function(costumeObject, isIdle = false, frameInit = 0){
+	p.setCostume = function(costumeObject, isIdle = false, frameInit = null){
 		let _index = this.actorID; //this.controller.getActorIndexByID(this.actorID);
 		let _actor = this.controller.actors[this.actorID];
 		
@@ -145,17 +146,23 @@ this.sjs = window.sjs || {};
 		}
 		this.COSTUME.isCost = true;//Give an identifier to the Display Object it self
 		
-		if(this.isTalking == true)this.stopTalking();//Stop talking first!!
+		if(this.isTalking == true && this.canSwitchWhileTalking == false)this.stopTalking();//Stop talking first!!
 		this.TalkingCompleted.removeAll();	//Stop talking first!!
 		if(typeof costumeObject === 'string' || costumeObject instanceof String){// Get the sprite as the costume
 			if(debug == true)console.log("[CostumeTrunk]STRING WAS PASED THROUGH as costumeObject");
 			costumeObject = [COSTUMES_DIRECTORY[roomTemps.currentRoomID][costumeObject], costumeObject];
-			//console.log("[CostumeTrunk]MY HACKED COSTUME OBJECT IS: " + costumeObject[0]._layer1.name);
+			if(costumeObject[0] === undefined){
+				if(debug == true)console.warn("[CostumeTrunk]Dumb warning..This Costume is not in the current room");
+				costumeObject[0] = this.controller.getCostume(costumeObject[1]);//Maybe set back to return if slowler machines strugle??
+				//return;
+			}
 		}		
 		if(this.COSTUME.name === costumeObject[1]){//Check if a Costume change  is needed
 			console.debug("[CostumeTrunk]Actor: " + this.actorID + " is already wearing: " + this.COSTUME.name);
+			if(frameInit !== null) this.gotoAndPlay(frameInit);
 			return;
-		}
+		}else if(frameInit === null)frameInit = 0;
+
 		if(this.COSTUME.numChildren >= 1){//Before we set a costume we have to make sure the Actor's children have been cleared
 			let kids = this.COSTUME.children;
 			while (kids.length){ 
@@ -189,19 +196,24 @@ this.sjs = window.sjs || {};
 				writable: false
 			});					
 		}
-		let _ogFPS = (_sprite.spriteSheet) ? _sprite.spriteSheet.orginalFPS : _FPS; 
-		sjs.Test.setAnimationSpeed(_sprite, ((fastMode == true) ? _fastFPS : _ogFPS ));//Enables Fast Mode
-		
-		//console.log("[CostumeTrunk]Costume's child at 0? " + _sprite);		
+		let _ogFPS = (_sprite.spriteSheet) ? _sprite.spriteSheet.orginalFPS : _FPS; 		
 		_sprite.onAddedListener = _sprite.on("added", this.costInit, this);		
 		this._layers._layer1 =_sprite;//Quick patch while _layers is being removed..
 		this.COSTUME.addChild(_sprite);
+		_sprite.visible = true;
 
 		this.animationendFunc = _sprite.on("animationend", function (e){
-			//console.log("AnimEnd on Costume", e);
 			e.target.off("animationend", this.animationendFunc);
 			this.animationendFunc = null;
-			if(!_actor.isIdle) this.AnimationFinishedSignal.dispatch(this.actorID);
+			//if(!_actor.isIdle){ 
+			if(_actor.isIdle === false){ 
+				//_sprite.visible = false;//Possible fix for one second black-out, see stage.cache() in Engine
+				if(_sprite.currentAnimation !== null)//Possible fix for one second black-out, see stage.cache() in Engine
+					_sprite.gotoAndStop(e.target.currentFrame);
+				else
+					_sprite.gotoAndStop(e.next);
+				this.AnimationFinishedSignal.dispatch(this.actorID);
+			}
 		}, this, true);		
 			
 		console.log("[CostumeTrunk]Actor: " + this.actorID + " goto frame: " +  frameInit);
@@ -210,8 +222,6 @@ this.sjs = window.sjs || {};
 		if(this.color == "purple" || this.color == "normal")_sprite.removeFilter();	
 		else _sprite.applyFilter(this.color);//apply the filter	
 		
-		//console.log("[CostumeTrunk]Actor: " + this.actorID + " has " + this.COSTUME.numChildren + ((this.COSTUME.numChildren == 1) ? " child.." : " children..") );
-		//console.log("[CostumeTrunk]What is COSTUME ? " + this.COSTUME);
 		return this.COSTUME;		
 		
 	};
@@ -232,8 +242,7 @@ this.sjs = window.sjs || {};
 			let _currentLayer = this._layers["_layer" + i];
 			let _currentLayerType = _currentLayer.type;
 			
-			//If the layer is not the EYES layer and is NOT hidden..
-			//if(_currentLayerType != sjs.CostumeLayersNewVO.EYES && !costumeObject[i].isHidden){
+			//If the layer is not the EYES layer:
 			if(_currentLayerType != sjs.CostumeLayersNewVO.EYES){
 				switch(_currentLayerType) {
 					case sjs.CostumeLayersNewVO.HEAD:
@@ -242,7 +251,8 @@ this.sjs = window.sjs || {};
 					case sjs.CostumeLayersNewVO.LIDS:
 					case sjs.CostumeLayersNewVO.EYES_WITH_LID:
 						this._lids = _currentLayer;
-						this._lids.on("added", this.lidsInit, this, true);//Allows for FrameScripts
+					  //this._lids.on("added", this.lidsInit, this, true);//Allows for FrameScripts
+						this._lids.on("tick", this.lidsInit, this);
 						this._lids.visible = ((_currentLayerType == sjs.CostumeLayersNewVO.EYES_WITH_LID) ? false : true);
 						//If the eyes json holds the lids as well ^
 						break;
@@ -261,7 +271,7 @@ this.sjs = window.sjs || {};
 					});					
 				}
 				let _ogFPS = (_currentLayer.spriteSheet) ? _currentLayer.spriteSheet.orginalFPS : _FPS; 
-				sjs.Test.setAnimationSpeed(_currentLayer, ((fastMode == true) ? _fastFPS : _ogFPS ));//Enables Fast Mode
+				//sjs.Test.setAnimationSpeed(_currentLayer, ((fastMode == true) ? _fastFPS : _ogFPS ));//Enables Fast Mode
 				
 				let _child = this.COSTUME.addChild(_currentLayer);//Add layer to COSTUME
 				if(costumeObject[i].isHidden && costumeObject[i].isHidden === true) _child.visible = false;	//Hide it if need be
@@ -307,11 +317,11 @@ this.sjs = window.sjs || {};
 			var _loc2 = _loc1.addChild(_layer[i].sprite);
 			_loc2.visible = false;
 			_loc2.name = _layer[i].eyeState;
-			//console.log(_loc2.name);
 		}		
 		this._eyes = _loc1;
 		this._eyes.getChildAt(0).visible = true;
 		this._eyes.getChildAt(0).gotoAndStop(0);
+		this._eyes.type = sjs.CostumeLayersNewVO.EYES;
 		this.COSTUME.addChild(this._eyes);
 	};
 	p.addLayer = function(sprite, frameData = {}, layerNumber){
@@ -356,19 +366,21 @@ this.sjs = window.sjs || {};
 			if(e.currentTarget.spriteSheet._relativeOffsets.length >= 1)//Testing relOffs
 				e.currentTarget.on("tick", this.relativeOffseting, this);
 			else
-				e.currentTarget.on("tick", this.movePuttsHead, this);
+				e.currentTarget.on("tick", this.movePuttsHead, this);//Remove this..
 		}//end
-		if(this.costInitFunc?.constructor !== undefined){
+		if(this.costInitFunc?.constructor !== undefined){//Only works when Actor was already created...Ex. addEmptyActor was called before setting costInitFunc
 			this.costInitFunc(e);
 			this.costInitFunc = null;
 		}//end
 		e.currentTarget.on("tick", this.updateCostumeColor, this);
 		e.currentTarget.on("change", this.doFrameScripts, this);
 		e.currentTarget.on("tick", this.handleAudioUpdates, this);
+		//let _event = new createjs.Event("added");
+		//this.COSTUME.dispatchEvent("added");;
 		if(e.target !== undefined && e.target.hasEventListener("added"))
 			e.target.off("added", e.target.onAddedListener);
 	};
-	p.lidsInit = function(e){
+	p.lidsInitFramesScriptVer = function(e){
 		if(this._lids){
 			console.debug("[CostumeTrunk]costInit() -> ADD BLINK RANDOM SCRIPTS");
 			var that = this;
@@ -382,6 +394,24 @@ this.sjs = window.sjs || {};
 				that._lids.visible = false;
 				that._lids.gotoAndStop(0);
 			}, checkTarget:this._lids}];				
+		}
+	};
+	p.lidsInit = function(e){
+		if(this._lids){
+			//console.debug("[CostumeTrunk]lidsInit() -> DO BLINK SCRIPT");
+			const _lidsAsTarget = e.target;
+			const _currentFrame = _lidsAsTarget.currentFrame;
+			const _currentAnimation = _lidsAsTarget.currentAnimation;
+			if(_currentFrame == 0){
+				if(getRandomInt(0, 80) == 25){
+					this.doBlink();
+					if (debug == true) console.log("BLINK..");
+				}else _lidsAsTarget.gotoAndStop(0);
+			};
+			if(_lidsAsTarget.spriteSheet.getAnimation("lids_end") && _currentAnimation == "lids_end"){
+				_lidsAsTarget.visible = false;
+				_lidsAsTarget.gotoAndStop(0);
+			};
 		}
 	};
 		
@@ -453,7 +483,7 @@ this.sjs = window.sjs || {};
 	
 	p.checkIfWaitIsStillActive = function(){
 		if(this._talkWaitActive == true){
-			console.log("TALKER IS NO LONGER IN WAIT");
+			if(debug == true)console.log("TALKER IS NO LONGER IN WAIT");
 			sjs.ActorController.stopWaitingTalkie();
 			this.handleAudioComplete();
 		}
@@ -476,7 +506,7 @@ this.sjs = window.sjs || {};
 		}
 		//If the Talkie Array want's to change who's talking
 		if(this.currentTalkingArray[this.talkieArrayIndex + 1].changeTalker){
-			console.log("FOUND changeTalker!");
+			if(debug == true) console.log("FOUND changeTalker!");
 			var _newTalker = this.currentTalkingArray[++this.talkieArrayIndex].changeTalker; //New Talker's ID
 			this.stopFlappingMouth("changeTalker", false);//Stop the last actor's mouth flaps but keep their eye state
 			this.controller.currentActorTalking = _newTalker;//set the new talker as the current
@@ -500,7 +530,7 @@ this.sjs = window.sjs || {};
 		_soundEffectsMediator.stopSoundsOnLayerByName('talkies', false);
 	}// end of the function
 	
-	p.stopTalking = function(dispatchEvent = false){	
+	p.stopTalking = function(dispatchEvent = false){
 		if((multiTextCCObj && multiTextCCObj._multiPartText && multiTextCCObj._multiPartText.length > 1) && multiTextCCObj._multiPartIndex >= 0)multiTextCCObj._multiPartIndex = -1;
 		this.stopTalkieAudio();
 		this.stopFlappingMouth("stopTalking");
@@ -521,7 +551,7 @@ this.sjs = window.sjs || {};
 			this._talkieCompletedCallback = talkieCompletedCallback;
 			var instance = playTalkieSnd(registerSound(whichTalkie), sjs.PuttCostume.createDelegate(this.handleAudioComplete, this), tag);//make sure to make a seperate function for playing talkies	
 			 if (instance == false || !instance || !instance.sfx) {
-				console.warn("[CostumeTrunk]playTalkieAudio()-> PLAY FAILED!");
+				if(debug == true)console.warn("[CostumeTrunk]playTalkieAudio()-> PLAY FAILED!");
 				this.talkieLoadError = true;
 				SignalsObject.CCTimeout.addOnce(this.handleTextComplete, this);
 				this.controller.currentTalkiePlaying = whichTalkie;
@@ -548,15 +578,14 @@ this.sjs = window.sjs || {};
 		if (multiTextCCObj.hasOwnProperty('_multiPartText') && (multiTextCCObj._multiPartText.length > 1 && multiTextCCObj._multiPartIndex >= 0)){
 			return;
 		}
-		console.log("[CostumeTrunk] Text is hidden..continue playing talkies...");
+		if(debug == true)console.log("[CostumeTrunk] Text is hidden..continue playing talkies...");
 		if(this.talkieLoadError)SignalsObject.CCTimeout.remove(this.handleTextComplete, this);
 		if(this._talkieCompletedCallback) this._talkieCompletedCallback();
 		this.handleAudioComplete();
 	}	
 	
 	p.handleAudioComplete = function(event) {
-		console.debug("[CostumeTrunk] Actor: " + this.actorID + " IS DONE TALKING!!!!");
-		
+		if(debug == true) console.debug("[CostumeTrunk] Actor: " + this.actorID + " IS DONE TALKING!!!!");		
 		
 		if(this.talkieLoadError == false) updateClosedCaptions(false);
 		if(this.isTalkingFromArray){
@@ -571,7 +600,7 @@ this.sjs = window.sjs || {};
 		this.controller.currentActorTalking	= null;
 		this.isTalking = false;
 		this.stopFlappingMouth("handleAudioComplete");
-		console.debug("[CostumeTrunk] handleAudioComplete() -> DISPATCH TALKING COMPLETED! ");
+		if(debug == true) console.debug("[CostumeTrunk] handleAudioComplete() -> DISPATCH TALKING COMPLETED! ");
 		this.TalkingCompleted.dispatch(this.actorID);
 		if(this._talkieCompletedCallback) this._talkieCompletedCallback();
 		this._talkWaitActive = false;
@@ -586,17 +615,15 @@ this.sjs = window.sjs || {};
 			if(_loc1.getChildAt(i).visible == true){
 				_loc1.getChildAt(i).visible = false;
 				_loc1.getChildAt(i).gotoAndStop(0);
-				console.debug("hide eyes: " + _loc1.getChildAt(i).name);
+				if(debug == true) console.debug("hide eyes: " + _loc1.getChildAt(i).name);
 			}
 		}
 	}	
 	
 	p.stopFlappingMouth = function(caller, updateEyes = true){	
-		//console.debug("[CostumeTrunk] stopFlappingMouth() -> " + caller);
-		if(this._head)this._head.gotoAndStop(0);
+		if(this._head)this._head.gotoAndStop((this._head.customTimeline && this._head.customTimeline.start) | 0);
 		if(this._eyes instanceof createjs.Container)this._eyes.getChildByName(this.eyeState).gotoAndStop(0);//12/9/21
 		if(this._eyes instanceof createjs.Container && this._eyes.children.length >= 1 && updateEyes == true){
-			//this.doBlink();
 			if(this._eyes.getChildByName(this.eyeState))this._eyes.getChildByName(this.eyeState).visible = false;
 			this._eyes.getChildByName(this.normalEyeState).visible = true;
 			this._eyes.getChildByName(this.normalEyeState).gotoAndStop(0);
@@ -606,7 +633,7 @@ this.sjs = window.sjs || {};
 	}
  
 	p.flapMouth = function(hasLipSync = false){	
-		console.debug("[CostumeTrunk] flapMouth(_eyeState: " + this.eyeState + ")");
+		if(debug == true) console.debug("[CostumeTrunk] flapMouth(_eyeState: " + this.eyeState + ")");
 		var _eyeLayer = this._eyes;		
 		if(this._lids)this._lids.removeAllEventListeners("animationend");		
 		let _eyeStateUpdate = this.lookAt(this.tempEyeState);
@@ -621,7 +648,8 @@ this.sjs = window.sjs || {};
 					if(debug == true)console.debug("[CostumeTrunk] flapMouth -> animationend"); 
 					_that.isFlapWaitingForLids = false;
 					if(_that.isTalking == false) return;
-					if(_that.getHead() && !hasLipSync )_that.getHead().gotoAndPlay(2);					
+					if(_that.mouthFlappingAnimation == undefined) _that.mouthFlappingAnimation = 2;
+					if(_that.getHead() && !hasLipSync )_that.getHead().gotoAndPlay(_that.mouthFlappingAnimation);					
 					if(!hasLipSync)_eyeLayer.getChildByName(_that.eyeState).gotoAndPlay(2);
 					else _eyeLayer.getChildByName(_that.eyeState).gotoAndStop(0);
 					_that.tempEyeState = "";
@@ -649,7 +677,8 @@ this.sjs = window.sjs || {};
 			** then just play through the mouth frames.
 			** Otherwise, don't play through the frames..
 			** ..method 'handleAudioUpdates will handle the frames **/
-			if(this.getHead() && !hasLipSync )this.getHead().gotoAndPlay(2);
+			if(this.mouthFlappingAnimation == undefined) this.mouthFlappingAnimation = 2;
+			if(this.getHead() && !hasLipSync )this.getHead().gotoAndPlay(this.mouthFlappingAnimation);
 			if(_eyeStateUpdate !== undefined){
 				if(!hasLipSync)_eyeLayer.getChildByName(this.eyeState).gotoAndPlay(2);
 				else _eyeLayer.getChildByName(this.eyeState).gotoAndStop(0);
@@ -661,8 +690,7 @@ this.sjs = window.sjs || {};
 
 	p.handleAudioUpdates = function(e) {
 		if(!this.actorID) return;
-		if(!this.controller.stage.canUpdate)return;
-		if(!this.isTalking)return;
+		if(!this.controller.stage.canUpdate)return;	
 	} // End of the function
 		
 	p.movePuttsHead = function(evt){	
@@ -670,10 +698,6 @@ this.sjs = window.sjs || {};
 		if(this.isIdle == false){console.debug("[CostumeTrunk]movePuttsHead() -> Don't do head updates if is not idle.."); evt.remove(); return;}
 		if(!this._body){console.warn("[CostumeTrunk]movePuttsHead() -> BODY LAYER IS MISSING! No body to get frame data from..");return;}
 		if(!this._head){console.warn("[CostumeTrunk]movePuttsHead() -> HEAD LAYER IS MISSING!");return;}
-										
-												
-											
-   
 		var _yPos = this._body.currentFrame;
 		if(this._head)this._head.y = _yPos;//Head
 		if(this._eyes)this._eyes.y = _yPos;//Dynamic Eyes
@@ -698,15 +722,16 @@ this.sjs = window.sjs || {};
 	
 	p.updateCostumeColor = function(evt){	
 		if(!this.actorID) return;
-		//evt.currentTarget.updateCache();
 	};
 	
 	/**key 's' is the function that'll be called
 	* varirable 'a' is the local var stored to tell a frame script to be invoked once
 	* key 'once' is the programer's key to make a frame script be invoked once**/
 	p.doFrameScripts = function(e){
+		if(this.FramesSignal.getNumListeners() > 0)this.FramesSignal.dispatch(e);	
 		if(!this.frameScipts)return;
 		//if(!this.isIdle)console.log("[CostumeTrunk]doFrameScripts() -> currentTarget: " + e.currentTarget.name +" is on FRAME: " + e.currentTarget.currentFrame);
+		//TODO: Debug this to see if looping on every frame causes issues on low powered machines
 		for(i = 0; i < this.frameScipts.length; i++){	
 			var _checkTarget = (this.frameScipts[i].checkTarget) ? this.frameScipts[i].checkTarget : e.currentTarget;
 			//If frame to be check is a number
@@ -724,7 +749,6 @@ this.sjs = window.sjs || {};
 				break;
 			}
 		}
-		this.FramesSignal.dispatch(e.currentTarget.currentFrame);	
 	};
 	
 	p.doBlink = function(){
@@ -765,58 +789,53 @@ this.sjs = window.sjs || {};
 		return false;
 	};
 	
+	p.play = function(){
+		if(!this.actorID)return false;
+		if(!this.COSTUME)return false;
+		let kids = this.COSTUME.children;
+		for (var i = 0; i < kids.length; i++) {
+			if(kids[i].type == sjs.CostumeLayersNewVO.EYES || kids[i].type == sjs.CostumeLayersNewVO.EYES_WITH_LID){
+				kids[i].getChildAt(0).play();
+			}else kids[i].play();
+		}//end loop	
+	};//eof
+	
 	p.gotoAndPlay = function(f){
 		if(!this.actorID)return false;
-		//console.debug("[CostumeTrunk][_gPlay]_layers: "+ this._layers._amount);
-		for(i = 0; i <= this._layers._amount; i++){	
-			if(this._layers["_layer" + i] && this._layers["_layer" + i].type != sjs.CostumeLayersNewVO.EYES){
-			 
-	
-											   
-				//console.debug("[CostumeTrunk][_gPlay]actor: "+ this.actorID +" gotoAndPlay: " + f);
-				this._layers["_layer" + i].gotoAndPlay(f);
-				continue;
-			}
-		}
-		return true;
+		if(!this.COSTUME)return false;
+		let kids = this.COSTUME.children;
+		for (var i = 0; i < kids.length; i++) {
+			if(kids[i].type == sjs.CostumeLayersNewVO.EYES || kids[i].type == sjs.CostumeLayersNewVO.EYES_WITH_LID){
+				kids[i].getChildAt(0).gotoAndPlay(f);
+			}else kids[i].gotoAndPlay(f);
+		}//end loop	
 	};
 	p.gotoAndStop = function(f, _layersAr){
 		if(!this.actorID)return false;
-		console.log("[CostumeTrunk][_gPlay]_layers: "+ this._layers._amount);
-		var _loc1 = 0;
-		var _loc2 = (_layersAr) ? _layersAr.length : this._layers._amount;
-		var _loc3 = (_layersAr) ? _layersAr : this._layers;
-		for(i = 0; i <= _loc2; i++){	
-			if(!this._layers["_layer" + i]){
-				continue;
-			}
-			if(this._layers["_layer" + i] != undefined){
-				console.log("[CostumeTrunk][_gPlay]actor: "+ this.actorID +" gotoAndStop: " + f);
-				if(i == 3 && this._eyes instanceof createjs.Container){
-					this._eyes.getChildAt(_loc1++).gotoAndStop(f);
-				}else{
-					this._layers["_layer" + i].gotoAndStop(f);
-				}
-				continue;
-			}
-		}
-		return true;
+		if(!this.COSTUME)return false;
+		let kids = this.COSTUME.children;
+		for (var i = 0; i < kids.length; i++) {
+			if(kids[i].type == sjs.CostumeLayersNewVO.EYES || kids[i].type == sjs.CostumeLayersNewVO.EYES_WITH_LID){
+				kids[i].getChildAt(0).gotoAndStop(f);
+			}else kids[i].gotoAndStop(f);
+		}//end loop	
 	};
 	p.stop = function(f){
 		if(!this.actorID)return false;
-		console.log("[CostumeTrunk][_gPlay]_layers: "+ this._layers._amount);
-		for(i = 0; i <= this._layers._amount; i++){	
-			if(!this._layers["_layer" + i]){
-				continue;
-			}
-			if(this._layers["_layer" + i] != undefined){
-				console.log("[CostumeTrunk][_gPlay]actor: "+ this.actorID +" stop: " + f);
-				this._layers["_layer" + i].stop(f);
-				continue;
-			}
-		}
-		return true;
-	};
+		if(!this.COSTUME)return false;
+		let kids = this.COSTUME.children;
+		for (var i = 0; i < kids.length; i++) {
+			if(kids[i].type == sjs.CostumeLayersNewVO.EYES || kids[i].type == sjs.CostumeLayersNewVO.EYES_WITH_LID){
+				kids[i].getChildAt(0).stop();
+			}else kids[i].stop();
+		}//end loop	
+	};//eof
+	p.getChildAt = function(_index){
+		if(!this.actorID)return false;
+		if(!this.COSTUME)return false;
+		if(this.COSTUME.children);
+			return this.COSTUME.getChildAt(_index);
+	};//eof
 	p.setOriginalFPS = function(){
 		if(!this.actorID)return false;
 		console.log("[CostumeTrunk][setOriginalFPS]_layers: "+ this._layers._amount);
@@ -852,8 +871,6 @@ this.sjs = window.sjs || {};
 			return func.apply(target, arguments);
 		};
 	};
-	
-	// private vars:
 	
 }());
  
