@@ -372,11 +372,8 @@ this.sjs = window.sjs || {};
 			this.costInitFunc(e);
 			this.costInitFunc = null;
 		}//end
-		e.currentTarget.on("tick", this.updateCostumeColor, this);
 		e.currentTarget.on("change", this.doFrameScripts, this);
 		e.currentTarget.on("tick", this.handleAudioUpdates, this);
-		//let _event = new createjs.Event("added");
-		//this.COSTUME.dispatchEvent("added");;
 		if(e.target !== undefined && e.target.hasEventListener("added"))
 			e.target.off("added", e.target.onAddedListener);
 	};
@@ -720,8 +717,18 @@ this.sjs = window.sjs || {};
 		}//EOL   
 	}; // End of the function
 	
-	p.updateCostumeColor = function(evt){	
+	p.changeColor = function(_color){	
 		if(!this.actorID) return;
+		if(!this.COSTUME) return;
+		let kids = this.COSTUME.children;
+		for (var i=0; i<=kids.length-1;i++) {
+			if(_color == "normal" && kids[i].removeFilter)//Add a flag to check for a defualt color?
+				kids[i].removeFilter();	
+			else if(kids[i].applyFilter) 
+				kids[i].applyFilter(_color);
+		}
+		this.color = _color;								   
+		this.CCColor = roomTemps._PCCColor[_color];	
 	};
 	
 	/**key 's' is the function that'll be called
