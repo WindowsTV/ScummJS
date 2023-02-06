@@ -8,21 +8,24 @@ window.sjs.ActorController = class ActorController{
 		// ...
 
 		// Use "this" to set class variables
-		this.stage = stage;//createjs.Stage		
-		this.actors = {0:undefined};//Default actors Object
-		this.actorLayer = room;	//The DisplayObject the actors will always be children of.
-		//this.talkie;	//No longer in use
+		this.stage = stage;		
+		this._actors = {0:undefined};
+		Object.defineProperty(this, "actors", {
+			get : function () {
+				return this._actors;
+			},
+			set : function (value) {
+				this.stage.actors = value;
+				this._actors = value;
+			}
+		});		
+		this.actorLayer = room;		
+		this.talkie;		
 		this.currentTalkiePlaying;		
 		this.currentActorTalking;
-		this.cantAddNewActors = false;//This stops any actors able to be drawn
+		this.cantAddNewActors = false;
 	}
 	
-	/**
-	 * addEmptyActor creates an actor without a costume. Having no costume means it won't be drawn until a costume is set.
-	 * @class addEmptyActor
-	 * @isPlayer {Bool} if it's the player, set up the Actor with player features.
-	 * @target {DisplayObject} The parent that the Costume will be attached to.
-	 */
 	addEmptyActor(isPlayer = false, target)
 	{
 		console.log("[ActorController]addEmptyActor(isPlayer = "+ isPlayer + ") -> Adding actor with NO COSTUME!");
@@ -31,9 +34,15 @@ window.sjs.ActorController = class ActorController{
 		return (this.addActor(-1, false, isPlayer, undefined, 0, target));
 	}// end of the function
 		
-	addActor(startingCostume, isIdle = false, isPlayerOrType = false, roomOverride = undefined, startFrame = 0, target = undefined, color = undefined)
-	{				
+	//When PuttCostume class is turned into Actor class then remove isPlayerOrType
+	addActor(startingCostume = -1, isIdle = false, isPlayerOrType = false, roomOverride = undefined, startFrame = 0, target = undefined, color = undefined)
+	{ 				
 		if(this.cantAddNewActors == true) return;
+		/*Does isCostumeInUse use a lot of resources??
+		* It's only here because the sprites are iniated at boot
+		* Createjs will break actors if a new actor is assigned an in 
+		* use sprite from Boot*/
+		if(this.isCostumeInUse(startingCostume)) return;
 		
 		var _actorID = this.getNextActorID();	
 		if(isPlayerOrType === "putt"){
@@ -53,7 +62,6 @@ window.sjs.ActorController = class ActorController{
 		var _cost;
 		if(startingCostume !== -1){
 			if(roomOverride == undefined && (COSTUMES_DIRECTORY[roomTemps.currentRoomID] == undefined || !COSTUMES_DIRECTORY[roomTemps.currentRoomID][startingCostume])){
-				//console.log("AAAAAAAAAH GET FROOM: " + roomOverride);
 				if(isInRestart == true) 
 					console.log("IS IN RESTART..");
 					return;
@@ -62,7 +70,7 @@ window.sjs.ActorController = class ActorController{
 		}else _cost = this.actors[_actorID].setCostume(-1, false);
 		
 		this.actors[_actorID].name = (startingCostume == -1) ? "empty_actor" : startingCostume;
-		this.stage.actors = this.actors;				
+		this.stage.actors = this.actors;
 		console.log("[ActorController] addActor()-> _actorID: " + _actorID + " / " + this.actors[_actorID].COSTUME);
 		
 		if(target == "addActorAt")//addActor was called from addActorAt()
@@ -105,43 +113,48 @@ window.sjs.ActorController = class ActorController{
 		return undefined;
 	}// end of the function
 	
-	actorTalk(actorIndex, whichTalkie){			
+	actorTalk(actorIndex, whichTalkie, dispatchStopTalkingEvent = false){			
+		if(this.currentActorTalking && this.actors[this.currentActorTalking])
+				this.actors[this.currentActorTalking].stopTalking(dispatchStopTalkingEvent);
 		if(this.actors[actorIndex] && this.actors[actorIndex].talk) this.actors[actorIndex].talk(whichTalkie);
 		else updateClosedCaptions(true, CCText.NO_ACTOR_ERROR, null, true);
 	}// end of the function	
 
-	skipDialogue(){			
-		console.log(this.getActorIndexByID(this.currentActorTalking));
-		if(this.currentActorTalking){
-			if(!this.actors[this.currentActorTalking])this.currentActorTalking = this.getActorIndexByID(this.currentActorTalking);
+	skipDialogue(){				
+		//If there is an actor talking and that actor has been defined
+		if(this.currentActorTalking && this.actors[this.currentActorTalking]){			
 			if(this.actors[this.currentActorTalking].isTalkingFromArray && this.actors[this.currentActorTalking].currentTalkingArray){
 				if((this.actors[this.currentActorTalking].talkieArrayIndex + 1) != this.actors[this.currentActorTalking].currentTalkingArray.length){
 					this.actors[this.currentActorTalking].stopTalkieAudio();
 					this.actors[this.currentActorTalking].nextTalkieInArr();
 				}else {this.actors[this.currentActorTalking].currentTalkingArray = null; this.actors[this.currentActorTalking].stopTalking(true); }
 			}
-			else {this.actors[this.currentActorTalking].currentTalkingArray = null; this.actors[this.currentActorTalking].stopTalking(true); }
-		}
+			else {
+				this.actors[this.currentActorTalking].currentTalkingArray = null; 
+				this.actors[this.currentActorTalking].stopTalking(true);
+			}//End if...else
+			return;
+		}//End of if statement
+		if(debug == true)console.log("[ActorController]skipDialogue -> No dialogue to skip..");
 	}// end of the function
 	stopActorTalking(actorID){	
-		var _actorIdex = this.getActorIndexByID(actorID);
-		if(this.currentActorTalking == actorID)this.actors[_actorIdex].stopTalking();
+		if(this.currentActorTalking == actorID)this.actors[actorID].stopTalking();
 	}// end of the function
 	
 	stopAllTalking(){	
-		//TODO: Use this.currentActorTalking instead of looping through
-		//REASON: Only ONE actor can talk at a time..
+		sjs.ActorController.stopWaitingTalkie();
 		for(i = 0; i <= Object.getOwnPropertyNames(actors).length; i++){
 			if(this.actors[i]  && this.actors[i].isTalking == true){					
 				this.actors[i].stopTalking();
-			}		
-		}//End of Loop
+			}	
+	
+		}
 	}// end of the function
 					
 	removeActor(actorID, doDelete = true, removeTarget = true)	{
-		//var index = this.getActorIndexByID(actorID, 'removeActor');
 		let index = actorID;
 		let actor = this.actors[index];	
+		if(debug == true) console.debug("[ActorController][CostumeTrunk]removeActor(actorID: " + actorID +") / " + this.actors[index].COSTUME);
 		if(!actor){
 			console.warn("[ActorController]Actor: " + actorID + " was not available to remove!!");
 			return;
@@ -152,6 +165,7 @@ window.sjs.ActorController = class ActorController{
 				this.actors[index].target.removeChild(this.actors[index].COSTUME);
 			}else this.actorLayer.removeChild(this.actors[index].COSTUME);
 		}
+		delete this.actors[index].COSTUME;
 		if(this.actors[index]._layers && this.actors[index]._layers._layer1)
 			this.actors[index]._layers._layer1.removeAllEventListeners();	
 		if(this.currentActorTalking == actorID){
@@ -165,13 +179,7 @@ window.sjs.ActorController = class ActorController{
 		this.actors[index].animationendFunc = null;	
 		this.actors[index].actorID = null;
 		this.actors[index].frameScipts = null;	
-		if(this.actors[index]._layers && this.actors[index]._layers._layer1){
-			const _fmix = _fastModeSprites.indexOf(this.actors[index]._layers._layer1);
-			if (_fmix > -1) {
-				console.log("FOUND FAST SPRITE!");
-			  _fastModeSprites.splice(_fmix, 1);
-			}
-		}
+
 		if(doDelete == true){
 			delete this.actors[index]; 
 		}
@@ -184,7 +192,6 @@ window.sjs.ActorController = class ActorController{
 	removeAllActorsFromRoom(setCantAddNewActors = false){
 		for(var key in this.actors){
 			if(this.actors[key] && this.actors[key].actorID){
-				if(debug == true) console.debug("[ActorController]removeAllActorsFromRoom() -> "+ this.actors[key].COSTUME.name);
 				this.removeActor(this.actors[key].actorID, false, false);
 			}
 		};
@@ -198,11 +205,33 @@ window.sjs.ActorController = class ActorController{
 	}// end of the function
 			
 	hideCostume(actor){
-		this.actors[index].COSTUME.visible = false;
+		this.actors[actor].COSTUME.visible = false;
 	}// end of the function
 	
 	showCostume(actor){
-		this.actors[index].COSTUME.visible = true;
+		this.actors[actor].COSTUME.visible = true;
+	}// end of the function
+	
+	isCostumeInUse(_costName){
+		if(_costName == -1) return false; 
+		for(var key in this.actors){
+			if(this.actors[key] && this.actors[key].actorID){
+				if(this.actors[key].COSTUME && this.actors[key].COSTUME.name == _costName){
+					return true;
+				}
+			}
+		};
+		return false;
+	}// end of the function
+	
+	getCostume(_costName){
+		//COSTUMES_DIRECTORY[roomTemps.currentRoomID][costumeObject]
+		for(var _room in COSTUMES_DIRECTORY){
+			if(COSTUMES_DIRECTORY[_room][_costName]){
+				return COSTUMES_DIRECTORY[_room][_costName];
+			}//end if
+		};//end loop
+		return false;
 	}// end of the function
 			
 	getNextActorID(){
