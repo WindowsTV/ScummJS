@@ -6,6 +6,8 @@ SignalsObject.roomInitiated.dispatch();//Let the Engine know the room code is he
 function enter(){	
 	hasEnterScriptEnded = false;
 	SignalsObject.EscapeSignal.removeAll();//Remove all lingering skip listeners
+	/*skipEnterScript() is not really needed...you can call handleEnterScriptEnded() directly 
+	* Why it's there if some special happens opnly if the script was skipped */
 	SignalsObject.EscapeSignal.addOnce(this.skipEnterScript, this);//Add skip listener
 	showInterface(true);
 	setRoomHintTo();
@@ -25,12 +27,14 @@ function setRoomHintTo(hintType = undefined){
 }
 
 function handleEnterScriptEnded(){
+	//Endinge will call a handleEnterScriptDone() if last room was a "menu"
 	if(hasEnterScriptEnded == true) return;//Only do this once..
 	SignalsObject.removeAllSignals();//Remove All global Signals 
 	this.hasEnterScriptEnded = true;//Set to true!
 }
 
 function skipEnterScript(){
+	//Engine will call this if last room was a "menu"
 	/*Do specific signal removes here 
 	* or anything else that needs to be fixed because we skipped the enter of a room
 	* and then run handleEnterScriptEnded()*/
