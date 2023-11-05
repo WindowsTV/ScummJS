@@ -43,8 +43,8 @@ this.sjs = window.sjs || {};
 						if(this.COSTUME)
 							this._layers_._layer1 = this.COSTUME.getChildAt(0);
 					}//End if
-					if(this.COSTUME) this._layers_._amount = this.COSTUME.numChildren;
-					else this._layers_._amount = 1;
+					//if(this.COSTUME) this._layers_._amount = this.COSTUME.numChildren;
+					//else this._layers_._amount = 1;
 					return this._layers_; 
 				},//End GET			
 				set: function(value) {this._layers_ = value;}}//End SET
@@ -90,7 +90,7 @@ this.sjs = window.sjs || {};
 		this.costInitFunc = null;//Only works when Actor was created...Ex. addEmptyActor was called before setting costInitFunc
 		
 		//EVENTS AND SIGNALS
-		this.animationendFunc;		
+		this.animationOnEndListener;//animationendFunc	
 		this.dispatchAnimationEnd = true;		
 		this.isAnimatiing = false;	
 		this.AnimationFinishedSignal = new signals.Signal(Number);	
@@ -163,9 +163,14 @@ this.sjs = window.sjs || {};
 					return;
 			}
 		}		
+		//if(this.animationOnEndListener) this.getChildAt(0).off("animationend", this.animationOnEndListener);
 		if(this.COSTUME.name === costumeObject[1]){//Check if a Costume change  is needed
 			console.debug(this.CLASS_STRING, "Actor: " + this.actorID + " is already wearing: " + this.COSTUME.name);
 			if(frameInit !== null) this.gotoAndPlay(frameInit);
+			if(!this.animationOnEndListener){	
+				console.debug(this.CLASS_STRING, "Actor: " + this.actorID + " add animationend..frame change Ver.");
+				this.animationOnEndListener = this.getChildAt(0).on("animationend", this.handleOnAnimationEnd, this, true, this.getChildAt(0));		
+			}
 			return;
 		}else if(frameInit === null)frameInit = 0;
 
@@ -185,6 +190,7 @@ this.sjs = window.sjs || {};
 		this._lids = undefined;
 		if(costumeObject == -1){
 			this.COSTUME.name = "empty_costume";
+			this.COSTUME.onAddedListener = this.COSTUME.on("added", this.costInit, this);//May need to remove??	
 			this.COSTUME.addChild(new createjs.Container());//May need to set _layer1 as name
 			return this.COSTUME;		
 		}
@@ -205,37 +211,46 @@ this.sjs = window.sjs || {};
 				writable: false
 			});					
 		}
-		let _ogFPS = (_sprite.spriteSheet) ? _sprite.spriteSheet.orginalFPS : _FPS; 
-		
+		let _ogFPS = (_sprite.spriteSheet) ? _sprite.spriteSheet.orginalFPS : _FPS; 		
 		_sprite.onAddedListener = _sprite.on("added", this.costInit, this);		
 		this.COSTUME.addChild(_sprite);
 		_sprite.visible = true;
 
-		this.animationendFunc = _sprite.on("animationend", function (e){
-			e.target.off("animationend", this.animationendFunc);
-			this.animationendFunc = null;
-			if(_actor.dispatchAnimationEnd === false) return; 
-			if(_actor.isIdle === false){ 
-				//_sprite.visible = false;//Possible fix for one second black-out, see stage.cache() in Engine
-				if(_sprite.currentAnimation !== null)//Possible fix for one second black-out, see stage.cache() in Engine
-					_sprite.gotoAndStop(e.target.currentFrame);
-				else
-					_sprite.gotoAndStop(e.next);
-				//this.AnimationFinishedSignal.dispatch(this.actorID);
-			}
-			this.AnimationFinishedSignal.dispatch(this.actorID);
-		}, this, true);		
+		if(!this.animationOnEndListener){	
+			console.debug(this.CLASS_STRING, "Actor: " + this.actorID + " add animationend... regular Ver.");
+			this.animationOnEndListener = _sprite.on("animationend", this.handleOnAnimationEnd, this, true, _sprite);
+		}			
 			
 		console.log(this.CLASS_STRING, "Actor: " + this.actorID + " goto frame: " +  frameInit);
 		_sprite.gotoAndPlay(frameInit);
 		
 		if(this.color == "purple" || this.color == "normal")_sprite.removeFilter();	
 		else _sprite.applyFilter(this.color);//apply the filter	
-
+		
+		//console.log("["+this.CLASS_NAME+"]Actor: " + this.actorID + " has " + this.COSTUME.numChildren + ((this.COSTUME.numChildren == 1) ? " child.." : " children..") );
+		//console.log("["+this.CLASS_NAME+"]What is COSTUME ? " + this.COSTUME);
 		return this.COSTUME;		
 		
 	};
-		
+	
+	p.handleOnAnimationEnd = function (e, _sprite, _dispatchSignal = true){
+		if(debug == true) console.log(this.CLASS_STRING, "AnimEnd on for", this.actorID/*, e*/);
+		let _actor = this.controller.actors[this.actorID];
+		if(!_actor) return;
+		e.target.off("animationend", this.animationOnEndListener);
+		this.animationOnEndListener = null;
+		if(_actor.dispatchAnimationEnd === false) return; 
+		if(_actor.isIdle === false){ 
+			//_sprite.visible = false;//Possible fix for one second black-out, see stage.cache() in Engine
+			if(_sprite.currentAnimation !== null)//Possible fix for one second black-out, see stage.cache() in Engine
+				_sprite.gotoAndStop(e.target.currentFrame);
+			else
+				_sprite.gotoAndStop(e.next);
+			//this.AnimationFinishedSignal.dispatch(this.actorID);
+		}
+		this.AnimationFinishedSignal.dispatch(this.actorID);
+	};	
+	
 	p.setLayeredCostume = function(_index, costumeObject, options = {"play": 0}){
 		//TODO: Change _layer# refs to getChildAt or DisplayObject.children[#]
 		console.debug(this.CLASS_STRING, "Setup a layered costume...");
@@ -245,54 +260,54 @@ this.sjs = window.sjs || {};
 		var _lyr1 = this._layers._layer1;
 		_lyr1.onAddedListener = _lyr1.on("added", this.costInit, this, true);//Allows for FrameScripts
 		
-		for(i = 1; i <= this._layers._length; i++){	//Loop through the layers and start attatching to COSTUME
-			let _currentLayer = this._layers["_layer" + i];
-			let _currentLayerType = _currentLayer.type;
-			
-			//If the layer is not the EYES layer and is NOT hidden..
-			//if(_currentLayerType != sjs.CostumeLayersNewVO.EYES && !costumeObject[i].isHidden){
-			if(_currentLayerType != sjs.CostumeLayersNewVO.EYES){
-				switch(_currentLayerType) {
-					case sjs.CostumeLayersNewVO.HEAD:
-						this.setHead(_currentLayer);
-						break;
-					case sjs.CostumeLayersNewVO.LIDS:
-					case sjs.CostumeLayersNewVO.EYES_WITH_LID:
-						this._lids = _currentLayer;
-					  //this._lids.on("added", this.lidsInit, this, true);//Allows for FrameScripts
-						this._lids.on("tick", this.lidsInit, this);
-						this._lids.visible = ((_currentLayerType == sjs.CostumeLayersNewVO.EYES_WITH_LID) ? false : true);
-						//If the eyes json holds the lids as well ^
-						break;
-					case sjs.CostumeLayersNewVO.BODY: //Body setup
-						this.setBody(_currentLayer);
-						if(this.isIdle == true)this._body.gotoAndPlay(0);
-						break;
-					default:
-						console.warn(this.CLASS_STRING, "Unkown layer type was passed through");
+		for (let key in this._layers) {
+			if (this._layers.hasOwnProperty(key)) { // This check is important to skip inherited properties
+				let _currentLayer = this._layers[key];
+				let _currentLayerType = _currentLayer.type;
+				//If the layer is not the EYES layer and is NOT hidden..
+				if(_currentLayerType != sjs.CostumeLayersNewVO.EYES){
+					switch(_currentLayerType) {
+						case sjs.CostumeLayersNewVO.HEAD:
+							this.setHead(_currentLayer);
+							break;
+						case sjs.CostumeLayersNewVO.LIDS:
+						case sjs.CostumeLayersNewVO.EYES_WITH_LID:
+							this._lids = _currentLayer;
+						  //this._lids.on("added", this.lidsInit, this, true);//Allows for FrameScripts
+							this._lids.on("tick", this.lidsInit, this);
+							this._lids.visible = ((_currentLayerType == sjs.CostumeLayersNewVO.EYES_WITH_LID) ? false : true);
+							//If the eyes json holds the lids as well ^
+							break;
+						case sjs.CostumeLayersNewVO.BODY: //Body setup
+							this.setBody(_currentLayer);
+							if(this.isIdle == true)this._body.gotoAndPlay(0);
+							break;
+						default:
+							console.warn(this.CLASS_STRING, "Unkown layer type was passed through");
+					}// End...Switch
+					//Set the original FPS and make it read-only
+					if(typeof(_currentLayer.spriteSheet) != 'undefined' && !_currentLayer.spriteSheet.orginalFPS){
+						Object.defineProperty(_currentLayer.spriteSheet, "orginalFPS", {
+							value: parseInt(_currentLayer.spriteSheet.framerate),
+							writable: false
+						});					
+					}//End if for for creating orginalFPS
+					let _ogFPS = (_currentLayer.spriteSheet) ? _currentLayer.spriteSheet.orginalFPS : _FPS;//_FPS is set in the index.html 					
+					let _child = this.COSTUME.addChild(_currentLayer);//Add layer to COSTUME
+					let _layerIndex = key.toString().split("_layer")[1];
+					if (costumeObject[_layerIndex] && costumeObject[_layerIndex].isHidden === true) _child.visible = false;	//Hide it if need be
+					
+				}else if(_currentLayerType == sjs.CostumeLayersNewVO.EYES) {//Eyes case..
+					this.addEyes(_currentLayer);//Setup dynamix eyes allowing the actor to look at something
 				}
-				//Set the original FPS and make it read-only
-				if(typeof(_currentLayer.spriteSheet) != 'undefined' && !_currentLayer.spriteSheet.orginalFPS){
-					Object.defineProperty(_currentLayer.spriteSheet, "orginalFPS", {
-						value: parseInt(_currentLayer.spriteSheet.framerate),
-						writable: false
-					});					
+				
+				//Do ColorBook
+				if((this.color == "purple" || this.color == "normal") && _currentLayer.removeFilter)
+					_currentLayer.removeFilter();	
+				else{
+					if(_currentLayer.applyFilter)
+						_currentLayer.applyFilter(this.color);//apply the filter	
 				}
-				let _ogFPS = (_currentLayer.spriteSheet) ? _currentLayer.spriteSheet.orginalFPS : _FPS; 
-				
-				let _child = this.COSTUME.addChild(_currentLayer);//Add layer to COSTUME
-				if(costumeObject[i].isHidden && costumeObject[i].isHidden === true) _child.visible = false;	//Hide it if need be
-				
-			}else if(_currentLayerType == sjs.CostumeLayersNewVO.EYES) {//Eyes case..
-				this.addEyes(_currentLayer);//Setup dynamix eyes allowing the actor to look at something
-			}
-			
-			//Do ColorBook
-			if((this.color == "purple" || this.color == "normal") && _currentLayer.removeFilter)
-				_currentLayer.removeFilter();	
-			else{
-				if(_currentLayer.applyFilter)
-					_currentLayer.applyFilter(this.color);//apply the filter	
 			}
 		}// END OF LOOP
 		
@@ -300,9 +315,9 @@ this.sjs = window.sjs || {};
 			_lyr1.gotoAndStop(options.stop);
 		}else if(_lyr1.type != sjs.CostumeLayersNewVO.HEAD) _lyr1.gotoAndPlay(options.play);	
 		
-		this.animationendFunc = _lyr1.on("animationend", function (e){
-			e.target.off("animationend", this.animationendFunc);
-			this.animationendFunc = null;
+		this.animationOnEndListener = _lyr1.on("animationend", function (e){
+			e.target.off("animationend", this.animationOnEndListener);
+			this.animationOnEndListener = null;
 			if(!_actor.isIdle) this.AnimationFinishedSignal.dispatch(this.actorID);
 		}, this, true);				
 				
@@ -378,6 +393,22 @@ this.sjs = window.sjs || {};
 		if(e.target !== undefined && e.target.hasEventListener("added"))
 			e.target.off("added", e.target.onAddedListener);
 	};
+	p.lidsInitFramesScriptVer = function(e){
+		if(this._lids){
+			console.debug("["+this.CLASS_NAME+"]costInit() -> ADD BLINK RANDOM SCRIPTS");
+			var that = this;
+			this.frameScipts = [{f:0,s:function (){
+				if(getRandomInt(0, 80) == 25){
+					that.doBlink();
+					//console.log("BLINK SCRIPT");
+				}else that._lids.gotoAndStop(0);
+			}, checkTarget:this._lids},
+			{f:"lids_end",s:function (){
+				that._lids.visible = false;
+				that._lids.gotoAndStop(0);
+			}, checkTarget:this._lids}];				
+		}
+	};
 	p.lidsInit = function(e){
 		if(this._lids && (this.COSTUME && this.COSTUME.visible === true)){
 			const _lidsAsTarget = e.target;
@@ -415,6 +446,10 @@ this.sjs = window.sjs || {};
 		//if(!this.actorID) throw '[CostumeTrunk]This Actor is not here?? What should I do?';
 		_mm_can_skip = false;//TODO: This needs to be rethunk
 		console.debug(this.CLASS_STRING, "talk()-> Actor:", this.actorID, "IS ABOUT TO TALK:", whichTalkie, "/ ignoresStopFlag:", ignoresStopFlag, "/ While lookingAt:", _eyeState);	
+		/*if(typeof(whichTalkie) !== 'undefined' && whichTalkie.lookAt){
+			this.tempEyeState = whichTalkie.lookAt;
+			whichTalkie = whichTalkie.audio;
+		}else this.tempEyeState = (_eyeState == undefined) ? "normal" : _eyeState;*/
 		if((typeof whichTalkie === 'object' || whichTalkie instanceof Object) && !Array.isArray(whichTalkie)){
 			console.log(this.CLASS_STRING, "talk()-> OpCodes:",  whichTalkie);
 			let _returned = this.processTalkieObject(whichTalkie, _eyeState);
@@ -423,7 +458,8 @@ this.sjs = window.sjs || {};
 				else whichTalkie = _returned;
 			}
 		}else this.tempEyeState = (_eyeState == undefined) ? "normal" : _eyeState;
-	
+
+		
 		if(!ignoresStopFlag){//Allows for talking overrides
 			if(this.controller.currentActorTalking == this.actorID){
 				//if it's the same actor talking just prep them for the new audio
@@ -627,6 +663,7 @@ this.sjs = window.sjs || {};
 	}	
 	
 	p.stopFlappingMouth = function(caller, updateEyes = true){	
+		//console.debug("["+this.CLASS_NAME+"] stopFlappingMouth() -> " + caller);
 		if(this._head)this._head.gotoAndStop((this._head.customTimeline && this._head.customTimeline.start) | 0);
 		if(this._eyes instanceof createjs.Container){//04/9/23
 			var _theStopper = (this._lids && this._lids.type == sjs.CostumeLayersNewVO.EYES_WITH_LID) ? this.eyeState : 0;
@@ -646,7 +683,10 @@ this.sjs = window.sjs || {};
  
 	p.flapMouth = function(hasLipSync = false){	
 		if(debug == true) console.debug(this.CLASS_STRING, "flapMouth(_eyeState: " + this.eyeState + ")");
-		var _eyeLayer = this._eyes;		
+		var _eyeLayer = this._eyes;
+		//if(this.getHead() && !hasLipSync )this.getHead().gotoAndPlay(2);
+		//var _eyeStateUpdate = this.lookAt(this.tempEyeState);
+		//this.flapWaitsForLids = false;		
 		if(this._lids)this._lids.removeAllEventListeners("animationend");
 		let _eyesOnLidsSpriteSheet = (this._lids && this._lids.type == sjs.CostumeLayersNewVO.EYES_WITH_LID)
 		let _eyeStateUpdate = this.lookAt(this.tempEyeState);
@@ -705,7 +745,7 @@ this.sjs = window.sjs || {};
 	p.handleAudioUpdates = function(e) {
 		if(!this.actorID) return;
 		if(!this.controller.stage.canUpdate)return;
-		if(!this.isTalking)return;	
+		if(!this.isTalking)return;			
 	} // End of the function
 				
 	p.relativeOffseting = function(e){	
@@ -756,6 +796,7 @@ this.sjs = window.sjs || {};
 		if(this.FramesSignal.getNumListeners() > 0)this.FramesSignal.dispatch(e);	
 		if(!this.frameScipts)return;
 		if(this.COSTUME && !this.COSTUME.visible)return;
+		//if(!this.isIdle)console.log("["+this.CLASS_NAME+"]doFrameScripts() -> currentTarget: " + e.currentTarget.name +" is on FRAME: " + e.currentTarget.currentFrame);
 		//TODO: Debug this to see if looping on every frame causes issues on low powered machines
 		for(i = 0; i < this.frameScipts.length; i++){	
 			var _checkTarget = (this.frameScipts[i].checkTarget) ? this.frameScipts[i].checkTarget : e.currentTarget;
@@ -838,7 +879,7 @@ this.sjs = window.sjs || {};
 			}else kids[i].gotoAndPlay(f);
 		}//end loop	
 	};
-	p.gotoAndStop = function(f, _layersAr){
+	p.gotoAndStop = function(f, _dispatchAnimationEndEvent){
 		if(!this.actorID)return false;
 		if(!this.COSTUME)return false;
 		let kids = this.COSTUME.children;
@@ -847,8 +888,9 @@ this.sjs = window.sjs || {};
 				kids[i].getChildAt(0).gotoAndStop(f);
 			}else kids[i].gotoAndStop(f);
 		}//end loop	
+		if(_dispatchAnimationEndEvent == true) kids[0].dispatchEvent("animationend");
 	};
-	p.stop = function(f){
+	p.stop = function(f, _dispatchAnimationEndEvent){
 		if(!this.actorID)return false;
 		if(!this.COSTUME)return false;
 		let kids = this.COSTUME.children;
@@ -857,6 +899,7 @@ this.sjs = window.sjs || {};
 				kids[i].getChildAt(0).stop();
 			}else kids[i].stop();
 		}//end loop	
+		if(_dispatchAnimationEndEvent == true) kids[0].dispatchEvent("animationend");
 	};//eof
 	p.getChildAt = function(_index){
 		if(!this.actorID)return false;
@@ -865,7 +908,8 @@ this.sjs = window.sjs || {};
 			return this.COSTUME.getChildAt(_index);
 	};//eof
 	p.setFramerate = function(_framerate, _toOrginal = false){
-		if(!this.actorID)return false;		
+		if(!this.actorID)return false;
+		console.log("["+this.CLASS_NAME+"][setFramerate]");		
 		if(this.COSTUME){
 			for (const _child in this.COSTUME.children) {
 				let _sprite = this.COSTUME.children[_child];
@@ -881,7 +925,8 @@ this.sjs = window.sjs || {};
 		}//End If
 	};
 	p.setOriginalFPS = function(){
-		if(!this.actorID)return false;		
+		if(!this.actorID)return false;
+		console.log("["+this.CLASS_NAME+"][setOriginalFPS]_layers");		
 		if(this.COSTUME)
 			this.setFramerate(undefined, true);
 	};
@@ -899,7 +944,6 @@ this.sjs = window.sjs || {};
 	// private methods:
 	sjs.Actor = Actor;
 	sjs.Actor.createDelegate = function(func, target) {
-		//TODO: Remove and use sjs.createDelegate
 		return function() { 
 			return func.apply(target, arguments);
 		};
