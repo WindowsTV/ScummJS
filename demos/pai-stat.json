@@ -1,0 +1,31 @@
+{
+	"base_url":"ROOMS/ROOM2/COSTUMES/PUTT/",
+	"framerate":10,
+	"layers":{
+		"body":{
+			"isHidden":true,
+			"canColorize":true,
+			"images":["pai-stat-body.png"],
+			"frames":[
+				[256, 0, 256, 128, 0, -195, -234,{
+						"relativeOffsets": [0, 1]
+				}],
+				[0, 0, 256, 128, 0, -195, -234,{
+						"relativeOffsets": [0, 0]
+				}]
+			],
+			"animations":{}
+		},
+		"head":{
+			"canColorize":true,
+			"src":"pai-stat-head.json"
+		},
+		"eyes-normal": "pai-stat-eyes-normal.json",
+		"eyes-player": "pai-stat-eyes-normal.json",
+		"lids":"",
+		"lidsInEyeSS":"",
+		"extra":"",
+		"extra1":"",
+		"extra2":""
+	}
+}
